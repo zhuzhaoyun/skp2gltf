@@ -10,7 +10,7 @@
 #include <vector>
 #include <string>
 #include <unordered_map>
-#include "parsegltf.h"
+// #include "parsegltf.h"
 #include <draco/compression/encode.h>
 #include <draco/io/mesh_io.h>
 #include <draco/io/point_cloud_io.h>
