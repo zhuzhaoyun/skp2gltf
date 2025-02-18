@@ -26,7 +26,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/thirdparty/SketchUpAPI
     ${PROJECT_SOURCE_DIR}/thirdparty/rapidxml
     ${PROJECT_SOURCE_DIR}/thirdparty/tinyxml2
-    ${PROJECT_SOURCE_DIR}/thirdparty/xml2json/include
+    ${PROJECT_SOURCE_DIR}/thirdparty/xml2json
 )
 
 # 添加子目录
