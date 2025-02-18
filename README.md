@@ -88,7 +88,7 @@ skp2gltf.exe "C:\models\model.skp" "C:\models\output" "result"
 
 欢迎提交 Issue 和 Pull Request！
 如需进一步沟通，请通过以下邮箱联系我们：  
-**Email:** contact@example.com
+**Email:** dlutyaol@qq.com
 
 ![QR Code](./static/contact.jpg)
 

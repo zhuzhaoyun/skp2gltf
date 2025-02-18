@@ -88,7 +88,7 @@ Note:
 
 Issues and Pull Requests are welcome!
 For further communication, please contact us via email:  
-**Email:** contact@example.com
+**Email:** dlutyaol@qq.com
 
 ![QR Code](./static/contact.jpg)
 
