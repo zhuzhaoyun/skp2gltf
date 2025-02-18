@@ -1,0 +1,1 @@
+add_library(exportgltflib exportgltf.cpp exportgltf2xml.cpp)
