@@ -31,7 +31,6 @@ include_directories(
 
 # 添加子目录
 add_subdirectory(src/gltflib)
-add_subdirectory(src/exportgltf)
 add_subdirectory(src/skp2xml)
 add_subdirectory(src/tinyxml2)
 
@@ -53,7 +52,6 @@ endif()
 
 target_link_libraries(skp2gltf PRIVATE
     gltflib
-    exportgltflib
     skp2xml
     tinyxml2
     ${CMAKE_SOURCE_DIR}/lib/SketchUpAPI.lib

@@ -13,8 +13,6 @@
 #include <memory>
 #include <vector>
 #include <cstdarg>
-#include "exportgltf/exportgltf.h"
-#include "exportgltf/exportgltf2xml.h"
 #include "skp2xml/xmlexporter.h"
 #include "tinyxml2/tinyxml2.h"
 #include "skp2xml/xmlexporter.h"
