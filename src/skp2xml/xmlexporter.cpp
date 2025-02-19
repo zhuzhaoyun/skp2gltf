@@ -68,10 +68,6 @@ class CSUString
     }
 
   private:
-    // Disallow copying for simplicity
-    CSUString(const CSUString &copy);
-    CSUString &operator=(const CSUString &copy);
-
     SUStringRef su_str_;
 };
 
@@ -91,13 +87,6 @@ static std::string GetLayerName(SULayerRef layer)
     return name.utf8();
 }
 
-// Utility function to get a component definition's name
-static std::string GetComponentDefinitionName(SUComponentDefinitionRef comp_def)
-{
-    CSUString name;
-    SU_CALL(SUComponentDefinitionGetName(comp_def, name));
-    return name.utf8();
-}
 
 CXmlExporter::CXmlExporter()
 {
@@ -171,24 +160,6 @@ bool CXmlExporter::Convert(const std::string &src_file,
     }
     ReleaseModelObjects();
     return exported;
-}
-
-void CXmlExporter::WriteTextureFiles()
-{
-    if (options_.export_materials())
-    {
-        // Load the textures into the texture writer
-        CXmlTextureHelper texture_helper;
-        size_t texture_count = texture_helper.LoadAllTextures(model_, texture_writer_, options_.export_materials_by_layer());
-        stats_.set_textures(texture_count);
-
-        // Write out all the textures to a the export folder
-        if (texture_count > 0)
-        {
-            std::string texture_directory = file_.GetTextureDirectory();
-            SU_CALL(SUTextureWriterWriteAllTextures(texture_writer_, texture_directory.c_str()));
-        }
-    }
 }
 
 static void WriteMaterialsTextureImage(SUMaterialRef material, const std::string &texture_image_file)
@@ -271,59 +242,6 @@ static XmlMaterialInfo GetMaterialInfo(SUMaterialRef material, const std::string
 
     return info;
 }
-void CXmlExporter::WriteLayers()
-{
-    if (options_.export_layers())
-    {
-        file_.StartLayers();
-
-        // Get the number of layers
-        size_t num_layers = 0;
-        SU_CALL(SUModelGetNumLayers(model_, &num_layers));
-        if (num_layers > 0)
-        {
-            // Get the layers
-            std::vector<SULayerRef> layers(num_layers);
-            SU_CALL(SUModelGetLayers(model_, num_layers, &layers[0], &num_layers));
-            // Write out each layer
-            for (size_t i = 0; i < num_layers; i++)
-            {
-                SULayerRef layer = layers[i];
-                WriteLayer(layer);
-            }
-        }
-        file_.PopParentNode();
-    }
-}
-
-void CXmlExporter::WriteLayer(SULayerRef layer)
-{
-    if (SUIsInvalid(layer))
-        return;
-
-    XmlLayerInfo info;
-
-    // Name
-    info.name_ = GetLayerName(layer);
-
-    // Color
-    SUMaterialRef material  = SU_INVALID;
-    info.has_material_info_ = false;
-    if (SULayerGetMaterial(layer, &material) == SU_ERROR_NONE)
-    {
-        info.has_material_info_ = true;
-        info.material_info_     = GetMaterialInfo(material, file_.GetTextureDirectory());
-        WriteMaterialsTextureImage(material, info.material_info_.texture_path_);
-    }
-
-    // Visibility
-    bool is_visible = true;
-    SU_CALL(SULayerGetVisibility(layer, &is_visible));
-    info.is_visible_ = is_visible;
-
-    stats_.AddLayer();
-    file_.WriteLayerInfo(info);
-}
 
 void CXmlExporter::WriteMaterials()
 {
@@ -394,7 +312,8 @@ void CXmlExporter::WriteGeometry()
         ProcessGeometryBatch(model_entities, transformation, DEFAULT_BATCH_SIZE);
         
         // 确保处理完所有剩余数据
-        FlushGeometryBatch();
+        faceBuffer.clear();
+        faceBuffer.shrink_to_fit();
         
         file_.PopParentNode();
     }
@@ -403,11 +322,6 @@ void CXmlExporter::WriteGeometry()
 void CXmlExporter::ProcessGeometryBatch(SUEntitiesRef entities, 
                                       const SUTransformation& transformation,
                                       size_t batchSize) {
-    if (SUIsInvalid(entities)) {
-        std::cout << "Invalid entities reference" << std::endl;
-        return;
-    }
-
     size_t num_faces = 0;
     size_t num_groups = 0;
     size_t num_instances = 0;
@@ -451,40 +365,6 @@ void CXmlExporter::ProcessGeometryBatch(SUEntitiesRef entities,
     }
 }
 
-void CXmlExporter::FlushGeometryBatch() {
-    // 处理缓存中的所有剩余数据
-    faceBuffer.clear();
-    faceBuffer.shrink_to_fit();
-}
-
-void CXmlExporter::WriteComponentDefinitions()
-{
-    size_t num_comp_defs = 0;
-    SU_CALL(SUModelGetNumComponentDefinitions(model_, &num_comp_defs));
-    if (num_comp_defs > 0)
-    {
-        file_.StartComponentDefinitions();
-
-        std::vector<SUComponentDefinitionRef> comp_defs(num_comp_defs);
-        SU_CALL(SUModelGetComponentDefinitions(model_, num_comp_defs, &comp_defs[0], &num_comp_defs));
-        for (size_t def = 0; def < num_comp_defs; ++def)
-        {
-            SUComponentDefinitionRef comp_def = comp_defs[def];
-            WriteComponentDefinition(comp_def);
-        }
-
-        file_.PopParentNode();
-    }
-}
-
-void CXmlExporter::WriteComponentDefinition(SUComponentDefinitionRef comp_def)
-{
-    SUTransformation transformation = {1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-    std::string name                = GetComponentDefinitionName(comp_def);
-    SUEntitiesRef entities          = SU_INVALID;
-    SUComponentDefinitionGetEntities(comp_def, &entities);
-    WriteEntities(entities, transformation);
-}
 void CXmlExporter::WriteEntities(SUEntitiesRef entities, SUTransformation &transformation)
 {
     if (SUIsInvalid(entities)) {
@@ -583,26 +463,7 @@ void CXmlExporter::getComponentEntity(SUEntitiesRef entities, const SUTransforma
         }
     }
 }
-void CXmlExporter::addFace(SUEntitiesRef entities, const SUTransformation &transformation)
-{
-    size_t num_faces = 0;
-    SU_CALL(SUEntitiesGetNumFaces(entities, &num_faces));
-    if (num_faces > 0)
-    {
-        std::vector<SUFaceRef> faces(num_faces);
-        SU_CALL(SUEntitiesGetFaces(entities, num_faces, &faces[0], &num_faces));
-        for (size_t i = 0; i < num_faces; i++)
-        {
-            inheritance_manager_.PushElement(faces[i]);
-            {
-                SULayerRef layer = SU_INVALID;
-                SUDrawingElementGetLayer(SUFaceToDrawingElement(faces[i]), &layer);
-            }
-            WriteFace(faces[i], transformation);
-            inheritance_manager_.PopElement();
-        }
-    }
-}
+
 int CXmlExporter::exportToGltfImpl(const std::string &gltfName)
 {
     gltf::CreateGltfCommon createGltf;
@@ -647,23 +508,7 @@ int CXmlExporter::exportToGltfImpl(const std::string &gltfName)
     createGltf.createGltf("gltf", gltfName);
     return 0;
 }
-static double getDocProduct(double vertexTrans[3][3], double normalTrans[3])
-{
-    double x0 = vertexTrans[1][0] - vertexTrans[0][0];
-    double y0 = vertexTrans[1][1] - vertexTrans[0][1];
-    double z0 = vertexTrans[1][2] - vertexTrans[0][2];
 
-    double x1 = vertexTrans[2][0] - vertexTrans[0][0];
-    double y1 = vertexTrans[2][1] - vertexTrans[0][1];
-    double z1 = vertexTrans[2][2] - vertexTrans[0][2];
-
-    double xi = y0 * z1 - z0 * y1;
-    double yi = z0 * x1 - x0 * z1;
-    double zi = x0 * y1 - y0 * x1;
-
-    double docProduct = xi * normalTrans[0] + yi * normalTrans[1] + zi * normalTrans[2];
-    return docProduct;
-}
 void CXmlExporter::WriteFace(SUFaceRef face, const SUTransformation &transformation)
 {
     if (SUIsInvalid(face))
@@ -886,73 +731,6 @@ void CXmlExporter::WriteFace(SUFaceRef face, const SUTransformation &transformat
     
     SU_CALL(SUMeshHelperRelease(&mesh_ref));  // 及时释放mesh资源
     SU_CALL(SUUVHelperRelease(&uv_helper));
-}
-
-XmlEdgeInfo CXmlExporter::GetEdgeInfo(SUEdgeRef edge) const
-{
-    XmlEdgeInfo info;
-    info.has_layer_ = false;
-    if (options_.export_layers())
-    {
-        info.has_layer_  = true;
-        SULayerRef layer = inheritance_manager_.GetCurrentLayer();
-        if (!SUIsInvalid(layer))
-        {
-            SU_CALL(SUDrawingElementGetLayer(SUEdgeToDrawingElement(edge), &layer));
-            info.layer_name_ = GetLayerName(layer);
-        }
-    }
-
-    // Edge color
-    info.has_color_ = false;
-    if (options_.export_materials())
-    {
-        info.color_     = inheritance_manager_.GetCurrentEdgeColor();
-        info.has_color_ = true;
-    }
-
-    info.start_              = CPoint3d(-1, -1, -1);
-    SUVertexRef start_vertex = SU_INVALID;
-    SU_CALL(SUEdgeGetStartVertex(edge, &start_vertex));
-    SUPoint3D p;
-    SU_CALL(SUVertexGetPosition(start_vertex, &p));
-    info.start_ = CPoint3d(p);
-
-    info.end_              = CPoint3d(-1, -1, -1);
-    SUVertexRef end_vertex = SU_INVALID;
-    SU_CALL(SUEdgeGetEndVertex(edge, &end_vertex));
-    SU_CALL(SUVertexGetPosition(end_vertex, &p));
-    info.end_ = CPoint3d(p);
-
-    return info;
-}
-
-void CXmlExporter::WriteEdge(SUEdgeRef edge)
-{
-    if (SUIsInvalid(edge))
-        return;
-
-    XmlEdgeInfo info = GetEdgeInfo(edge);
-    file_.WriteEdgeInfo(info);
-    stats_.AddEdge();
-}
-
-void CXmlExporter::WriteCurve(SUCurveRef curve)
-{
-    if (SUIsInvalid(curve))
-        return;
-
-    XmlCurveInfo info;
-    size_t num_edges = 0;
-    SU_CALL(SUCurveGetNumEdges(curve, &num_edges));
-    std::vector<SUEdgeRef> edges(num_edges);
-    SU_CALL(SUCurveGetEdges(curve, num_edges, &edges[0], &num_edges));
-    for (size_t i = 0; i < num_edges; ++i)
-    {
-        XmlEdgeInfo edge_info = GetEdgeInfo(edges[i]);
-        info.edges_.push_back(edge_info);
-    }
-    file_.WriteCurveInfo(info);
 }
 
 // 添加新的方法实现
