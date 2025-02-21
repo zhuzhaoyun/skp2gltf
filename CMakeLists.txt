@@ -1,6 +1,19 @@
 cmake_minimum_required(VERSION 3.14)
 project(SKP2GLTF)
 
+# 添加编译类型配置
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose the type of build (Debug/Release)" FORCE)
+endif()
+
+# 根据编译类型设置编译选项
+if(MSVC)
+    # Debug 配置
+    set(CMAKE_CXX_FLAGS_DEBUG "/MTd /Zi /Ob0 /Od /RTC1")
+    # Release 配置
+    set(CMAKE_CXX_FLAGS_RELEASE "/MT /O2 /Ob2 /DNDEBUG")
+endif()
+
 set(CMAKE_CXX_STANDARD 14)
 
 set(BUILD_USE_64BITS on)
