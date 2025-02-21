@@ -1,3 +1,4 @@
 build/
 gltf_analyzer.py
 .vscode/*
+.vs/

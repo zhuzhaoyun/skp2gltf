@@ -14,8 +14,8 @@
 #include <stdint.h>  // For int32_t type
 #include <cstdint>  // 添加这一行
 
-#include "./xmlexporter.h"
-#include "./xmltexturehelper.h"
+#include "xmlexporter.h"
+#include "xmltexturehelper.h"
 #include "xmlgeomutils.h"
 #include "utils.h"
 
@@ -464,50 +464,199 @@ void CXmlExporter::getComponentEntity(SUEntitiesRef entities, const SUTransforma
     }
 }
 
-int CXmlExporter::exportToGltfImpl(const std::string &gltfName)
-{
-    gltf::CreateGltfCommon createGltf;
-    std::vector<gltf::Node> nodeVec;
-    std::vector<gltf::MeshData> meshDataVec;
-    int meshIndex = 0;
-    for (auto &item : facetMap)
-    {
-        gltf::Node node;
-        node.meshIndex = meshIndex++;
-        node.guid      = "node_" + std::to_string(meshIndex);
-        nodeVec.emplace_back(node);
-        size_t faceIndex = 0;
-        gltf::MeshData meshData;
-        gltf::Primitive pri;
-        std::vector<cFacet> facetVec = item.second;
-        for (int i = 0; i < facetVec.size(); i++)
-        {
-            tinygltf::Material material;
-            material.pbrMetallicRoughness.baseColorFactor = {item.first.r, item.first.g, item.first.b, item.first.a};
-            material.pbrMetallicRoughness.metallicFactor  = 0.0;
-            material.name                                 = item.first.name;
-            pri.imageUri                                  = item.first.imageUri;
-            pri.material                                  = material;
-            for (int j = 0; j < 3; j++)
-            {
-                pri.position.emplace_back(facetVec[i].vertex[j].x);
-                pri.position.emplace_back(facetVec[i].vertex[j].y);
-                pri.position.emplace_back(facetVec[i].vertex[j].z);
-                pri.indec.emplace_back(faceIndex++);
-                if (!facetVec.empty())
-                {
-                    pri.uv.emplace_back(facetVec[i].uv[j].x);
-                    pri.uv.emplace_back(-facetVec[i].uv[j].y);
+int CXmlExporter::exportToGltfImpl(const std::string &gltfName) {
+    tinygltf::Model model;
+    model.asset.version = "2.0";
+    model.asset.generator = "zhuzhaoyun";
+    tinygltf::Scene scene;
+    model.scenes.push_back(scene);
+    model.defaultScene = 0;
+    
+    // 添加一个默认buffer用于存储所有数据
+    model.buffers.push_back(tinygltf::Buffer());
+    
+    for (auto &item : facetMap) {
+        tinygltf::Mesh mesh;
+        tinygltf::Primitive primitive;
+        primitive.mode = 4;  // triangles
+        
+        // 收集顶点和索引数据
+        std::vector<float> positions;
+        std::vector<float> uvs;
+        std::vector<unsigned int> indices;
+
+        // 添加用于计算边界的变量
+        float posMin[3] = {FLT_MAX, FLT_MAX, FLT_MAX};
+        float posMax[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+        
+        std::vector<cFacet> &facetVec = item.second;
+        size_t vertexOffset = 0;
+        
+        for (size_t i = 0; i < facetVec.size(); i++) {
+            for (int j = 0; j < 3; j++) {
+                float x = static_cast<float>(facetVec[i].vertex[j].x);
+                float y = static_cast<float>(facetVec[i].vertex[j].y);
+                float z = static_cast<float>(facetVec[i].vertex[j].z);
+                
+                // 更新边界值
+                posMin[0] = (std::min)(posMin[0], x);
+                posMin[1] = (std::min)(posMin[1], y);
+                posMin[2] = (std::min)(posMin[2], z);
+                posMax[0] = (std::max)(posMax[0], x);
+                posMax[1] = (std::max)(posMax[1], y);
+                posMax[2] = (std::max)(posMax[2], z);
+                
+                positions.push_back(x);
+                positions.push_back(y);
+                positions.push_back(z);
+
+                if (!facetVec.empty()) {
+                    uvs.push_back(static_cast<float>(facetVec[i].uv[j].x));
+                    uvs.push_back(static_cast<float>(-facetVec[i].uv[j].y));
                 }
+                
+                indices.push_back(vertexOffset++);
             }
         }
-        meshData.primitives.emplace_back(pri);
-        meshDataVec.emplace_back(meshData);
+
+        // 创建并添加顶点位置buffer
+        {
+            tinygltf::BufferView bufferView;
+            bufferView.buffer = 0;
+            bufferView.byteOffset = model.buffers[0].data.size();
+            bufferView.byteLength = positions.size() * sizeof(float);
+            bufferView.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            
+            size_t bufferOffset = model.buffers[0].data.size();
+            model.buffers[0].data.resize(bufferOffset + bufferView.byteLength);
+            memcpy(model.buffers[0].data.data() + bufferOffset, positions.data(), bufferView.byteLength);
+            
+            int positionBufferViewIndex = model.bufferViews.size();
+            model.bufferViews.push_back(bufferView);
+            
+            tinygltf::Accessor accessor;
+            accessor.bufferView = positionBufferViewIndex;
+            accessor.byteOffset = 0;
+            accessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+            accessor.count = positions.size() / 3;
+            accessor.type = TINYGLTF_TYPE_VEC3;
+
+            // 设置边界值
+            accessor.minValues = {posMin[0], posMin[1], posMin[2]};
+            accessor.maxValues = {posMax[0], posMax[1], posMax[2]};
+
+            int positionAccessorIndex = model.accessors.size();
+            model.accessors.push_back(accessor);
+            
+            primitive.attributes["POSITION"] = positionAccessorIndex;
+        }
+        
+        // 创建并添加UV buffer (如果有UV数据)
+        if (!uvs.empty() && !item.first.imageUri.empty()) {
+            tinygltf::BufferView bufferView;
+            bufferView.buffer = 0;
+            bufferView.byteOffset = model.buffers[0].data.size();
+            bufferView.byteLength = uvs.size() * sizeof(float);
+            bufferView.target = TINYGLTF_TARGET_ARRAY_BUFFER;
+            
+            size_t bufferOffset = model.buffers[0].data.size();
+            model.buffers[0].data.resize(bufferOffset + bufferView.byteLength);
+            memcpy(model.buffers[0].data.data() + bufferOffset, uvs.data(), bufferView.byteLength);
+            
+            int uvBufferViewIndex = model.bufferViews.size();
+            model.bufferViews.push_back(bufferView);
+            
+            tinygltf::Accessor accessor;
+            accessor.bufferView = uvBufferViewIndex;
+            accessor.byteOffset = 0;
+            accessor.componentType = TINYGLTF_COMPONENT_TYPE_FLOAT;
+            accessor.count = uvs.size() / 2;
+            accessor.type = TINYGLTF_TYPE_VEC2;
+            
+            int uvAccessorIndex = model.accessors.size();
+            model.accessors.push_back(accessor);
+            
+            primitive.attributes["TEXCOORD_0"] = uvAccessorIndex;
+        }
+        
+        // 创建并添加索引buffer
+        {
+            tinygltf::BufferView bufferView;
+            bufferView.buffer = 0;
+            bufferView.byteOffset = model.buffers[0].data.size();
+            bufferView.byteLength = indices.size() * sizeof(unsigned int);
+            bufferView.target = TINYGLTF_TARGET_ELEMENT_ARRAY_BUFFER;
+            
+            size_t bufferOffset = model.buffers[0].data.size();
+            model.buffers[0].data.resize(bufferOffset + bufferView.byteLength);
+            memcpy(model.buffers[0].data.data() + bufferOffset, indices.data(), bufferView.byteLength);
+            
+            int indexBufferViewIndex = model.bufferViews.size();
+            model.bufferViews.push_back(bufferView);
+            
+            tinygltf::Accessor accessor;
+            accessor.bufferView = indexBufferViewIndex;
+            accessor.byteOffset = 0;
+            accessor.componentType = TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT;
+            accessor.count = indices.size();
+            accessor.type = TINYGLTF_TYPE_SCALAR;
+            
+            primitive.indices = model.accessors.size();
+            model.accessors.push_back(accessor);
+        }
+        
+        // 设置材质
+        tinygltf::Material material;
+        material.pbrMetallicRoughness.baseColorFactor = {
+            item.first.r, item.first.g, item.first.b, item.first.a
+        };
+        material.name = item.first.name;
+        material.pbrMetallicRoughness.metallicFactor = 0.0;
+        material.pbrMetallicRoughness.roughnessFactor = 1.0;
+        
+        if (!item.first.imageUri.empty()) {
+            std::string processedTexturePath = ProcessTexture(item.first.imageUri);
+            
+            tinygltf::Image gltfImage;
+            gltfImage.uri = processedTexturePath;
+            int imageIndex = model.images.size();
+            model.images.push_back(gltfImage);
+            
+            tinygltf::Texture gltfTexture;
+            gltfTexture.source = imageIndex;
+            int textureIndex = model.textures.size();
+            model.textures.push_back(gltfTexture);
+            
+            material.pbrMetallicRoughness.baseColorTexture.index = textureIndex;
+        }
+        
+        primitive.material = model.materials.size();
+        model.materials.push_back(material);
+        
+        mesh.primitives.push_back(primitive);
+        model.meshes.push_back(mesh);
+        
+        tinygltf::Node node;
+        node.mesh = model.meshes.size() - 1;
+        model.nodes.push_back(node);
+        model.scenes[0].nodes.push_back(model.nodes.size() - 1);
     }
-    createGltf.setMeshData(nodeVec, meshDataVec);
-    createGltf.createGltf("gltf", gltfName);
-    return 0;
+    
+    tinygltf::TinyGLTF gltf;
+    std::string outputPath = gltfName;
+    if (outputPath.length() < 5 || outputPath.substr(outputPath.length() - 5) != ".gltf") {
+        outputPath += ".gltf";
+    }
+    
+    bool ret = gltf.WriteGltfSceneToFile(&model, outputPath,
+                                        true,  // embedImages
+                                        true,  // embedBuffers
+                                        true,  // prettyPrint
+                                        false); // writeBinary
+    
+    return ret ? 0 : 1;
 }
+
 
 void CXmlExporter::WriteFace(SUFaceRef face, const SUTransformation &transformation)
 {
