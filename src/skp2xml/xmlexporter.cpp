@@ -330,10 +330,10 @@ void CXmlExporter::ProcessGeometryBatch(SUEntitiesRef entities,
     SU_CALL(SUEntitiesGetNumGroups(entities, &num_groups));
     SU_CALL(SUEntitiesGetNumInstances(entities, &num_instances));
     
-    std::cout << "Processing entity with:" << std::endl;
-    std::cout << "- Faces: " << num_faces << std::endl;
-    std::cout << "- Groups: " << num_groups << std::endl; 
-    std::cout << "- Instances: " << num_instances << std::endl;
+    // std::cout << "Processing entity with:" << std::endl;
+    // std::cout << "- Faces: " << num_faces << std::endl;
+    // std::cout << "- Groups: " << num_groups << std::endl; 
+    // std::cout << "- Instances: " << num_instances << std::endl;
     
     // 处理直接的面
     if (num_faces > 0) {
