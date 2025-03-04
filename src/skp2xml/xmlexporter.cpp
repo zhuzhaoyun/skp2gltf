@@ -115,8 +115,8 @@ void CXmlExporter::ReleaseModelObjects()
 }
 
 bool CXmlExporter::Convert(const std::string &src_file,
-                           const std::string &file_name,
                            const std::string &file_path,
+                           const std::string &file_name,
                            SketchUpPluginProgressCallback *progress_callback)
 {
     bool exported = false;
@@ -150,7 +150,7 @@ bool CXmlExporter::Convert(const std::string &src_file,
         // 在导出到GLTF之前压缩纹理
         CompressAndResizeTextures();
         
-        exportToGltfImpl(file_path + file_name);
+        exportToGltfImpl(file_name);
         exported = true;
     }
     catch (...)

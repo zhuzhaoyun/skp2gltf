@@ -41,7 +41,11 @@ int main(int argc, char **argv)
     const char *gltf_file = argv[3];
     CXmlExporter cXmlExporter;
     std::cout << "Start conversion" << std::endl;
-    cXmlExporter.Convert(skp_file, gltf_file, file_path, nullptr);
+
+    // C:\model\allRvtFile\skp\67beca5e7d1b0078ee8c7fee.skp 
+    // C:\model\model\skp\67beca5e7d1b0078ee8c7fee\ 
+    // C:\model\model\skp\67beca5e7d1b0078ee8c7fee
+    cXmlExporter.Convert(skp_file, file_path, gltf_file, nullptr);
     std::cout << "finished" << std::endl; 
     return 0;
 }
